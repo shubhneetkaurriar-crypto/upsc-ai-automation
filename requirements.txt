@@ -3,3 +3,6 @@ feedparser
 supabase
 python-dotenv
 google-generativeai
+newspaper4k
+lxml_html_clean
+beautifulsoup4
