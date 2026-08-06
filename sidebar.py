@@ -2,10 +2,6 @@ import feedparser
 from datetime import datetime
 
 
-# -----------------------------
-# LIVE SOURCES
-# -----------------------------
-
 SOURCES = {
 
     "PIB":
@@ -23,12 +19,13 @@ SOURCES = {
 }
 
 
+def today():
 
-# -----------------------------
-# DUPLICATE CHECK
-# -----------------------------
+    return datetime.now().strftime("%Y-%m-%d")
 
-def already_exists(supabase, table, column, value):
+
+
+def exists(supabase, table, column, value):
 
     result = (
         supabase
@@ -38,14 +35,9 @@ def already_exists(supabase, table, column, value):
         .execute()
     )
 
-    return len(result.data) > 0
+    return bool(result.data)
 
 
-
-
-# -----------------------------
-# SUBJECT CLASSIFIER
-# -----------------------------
 
 def get_subject(text):
 
@@ -65,8 +57,7 @@ def get_subject(text):
         "environment",
         "climate",
         "forest",
-        "wildlife",
-        "biodiversity"
+        "wildlife"
     ]):
         return "Environment"
 
@@ -75,7 +66,6 @@ def get_subject(text):
         "isro",
         "space",
         "technology",
-        "satellite",
         "science"
     ]):
         return "Science & Technology"
@@ -94,14 +84,9 @@ def get_subject(text):
 
 
 
+def fetch_live_items():
 
-# -----------------------------
-# FETCH ONLINE NEWS
-# -----------------------------
-
-def fetch_updates():
-
-    data = []
+    items = []
 
 
     for source, url in SOURCES.items():
@@ -111,15 +96,15 @@ def fetch_updates():
             feed = feedparser.parse(url)
 
 
-            for item in feed.entries[:5]:
+            for entry in feed.entries[:5]:
 
-                title = item.get(
+                title = entry.get(
                     "title",
                     ""
                 )
 
 
-                summary = item.get(
+                summary = entry.get(
                     "summary",
                     ""
                 )
@@ -127,7 +112,7 @@ def fetch_updates():
 
                 if title:
 
-                    data.append({
+                    items.append({
 
                         "source": source,
 
@@ -141,13 +126,13 @@ def fetch_updates():
         except Exception as e:
 
             print(
+                "RSS error",
                 source,
                 e
             )
 
 
-    return data
-
+    return items
 
 
 
@@ -157,63 +142,48 @@ def fetch_updates():
 
 def fetch_quotes(supabase):
 
-    quotes = [
+    quote = {
 
-        {
-            "quote":
-            "The Constitution is not a mere lawyers' document; it is a vehicle of life.",
+        "quote":
+        "The Constitution is not a mere lawyers' document; it is a vehicle of life.",
 
-            "author":
-            "Dr. B.R. Ambedkar",
+        "author":
+        "Dr. B.R. Ambedkar",
 
-            "theme":
-            "Constitutional Values"
-        },
+        "theme":
+        "Constitutional Values",
 
-        {
-            "quote":
-            "A public servant must have integrity, empathy and commitment towards citizens.",
+        "date":
+        today()
 
-            "author":
-            "UPSC Ethics Principle",
-
-            "theme":
-            "Public Service"
-        }
-
-    ]
+    }
 
 
-    for q in quotes:
+    if not exists(
+        supabase,
+        "quotes",
+        "quote",
+        quote["quote"]
+    ):
 
-        if not already_exists(
-            supabase,
-            "quotes",
-            "quote",
-            q["quote"]
-        ):
-
-            q["date"] = datetime.now().strftime(
-                "%Y-%m-%d"
-            )
-
-            supabase.table(
-                "quotes"
-            ).insert(q).execute()
-
+        supabase.table(
+            "quotes"
+        ).insert(
+            quote
+        ).execute()
 
 
 
 # -----------------------------
-# DAILY FACTS
+# FACTS
 # -----------------------------
 
 def fetch_facts(supabase):
 
-    updates = fetch_updates()
+    items = fetch_live_items()
 
 
-    for item in updates:
+    for item in items:
 
 
         fact = item["title"]
@@ -225,7 +195,7 @@ def fetch_facts(supabase):
 
 
 
-        if not already_exists(
+        if not exists(
             supabase,
             "daily_facts",
             "fact",
@@ -233,7 +203,9 @@ def fetch_facts(supabase):
         ):
 
 
-            data = {
+            supabase.table(
+                "daily_facts"
+            ).insert({
 
                 "fact":
                 fact,
@@ -244,17 +216,9 @@ def fetch_facts(supabase):
                 ),
 
                 "date":
-                datetime.now().strftime(
-                    "%Y-%m-%d"
-                )
+                today()
 
-            }
-
-
-            supabase.table(
-                "daily_facts"
-            ).insert(data).execute()
-
+            }).execute()
 
 
 
@@ -286,40 +250,28 @@ def fetch_reports(supabase):
             "Reserve Bank of India",
 
             "key_point":
-            "Useful for understanding inflation targeting, repo rate and monetary policy."
-        },
-
-
-        {
-            "report_name":
-            "Human Development Report",
-
-            "organisation":
-            "UNDP",
-
-            "key_point":
-            "Provides indicators related to health, education and standard of living."
+            "Explains inflation outlook and monetary policy decisions."
         }
 
     ]
 
 
-    for r in reports:
+    for report in reports:
 
 
-        if not already_exists(
+        if not exists(
             supabase,
             "reports",
             "report_name",
-            r["report_name"]
+            report["report_name"]
         ):
 
 
-            r["date"] = datetime.now().strftime(
-                "%Y-%m-%d"
-            )
+            report["date"] = today()
 
 
             supabase.table(
                 "reports"
-            ).insert(r).execute()
+            ).insert(
+                report
+            ).execute()
