@@ -5,6 +5,11 @@ from supabase import create_client
 
 from sidebar import fetch_quotes, fetch_facts, fetch_reports
 
+from news_sources import RSS_FEEDS
+from news_filter import is_relevant
+from article_extractor import extract_article
+from gs_classifier import classify_gs
+from importance import importance
 
 
 # -----------------------------
@@ -14,6 +19,7 @@ from sidebar import fetch_quotes, fetch_facts, fetch_reports
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
+
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise Exception("Supabase keys missing")
 
@@ -22,28 +28,6 @@ supabase = create_client(
     SUPABASE_URL,
     SUPABASE_KEY
 )
-
-
-
-# -----------------------------
-# RSS SOURCES
-# -----------------------------
-
-RSS_FEEDS = {
-
-    "Google News":
-    "https://news.google.com/rss/search?q=UPSC+India+government+economy+environment+science&hl=en-IN&gl=IN&ceid=IN:en",
-
-    "PIB":
-    "https://pib.gov.in/RssMain.aspx",
-
-    "RBI":
-    "https://www.rbi.org.in/rss/PressReleases.xml",
-
-    "PRS":
-    "https://prsindia.org/rss"
-
-}
 
 
 
@@ -63,17 +47,27 @@ def fetch_news():
 
             feed = feedparser.parse(url)
 
+
             for item in feed.entries[:10]:
 
                 articles.append({
 
-                    "title": item.get("title", ""),
+                    "title": item.get(
+                        "title",
+                        ""
+                    ),
 
-                    "link": item.get("link", ""),
+                    "link": item.get(
+                        "link",
+                        ""
+                    ),
 
                     "summary": item.get(
                         "summary",
-                        item.get("description", "")
+                        item.get(
+                            "description",
+                            ""
+                        )
                     ),
 
                     "source": source
@@ -83,7 +77,11 @@ def fetch_news():
 
         except Exception as e:
 
-            print(source, "error:", e)
+            print(
+                source,
+                "error:",
+                e
+            )
 
 
     return articles
@@ -97,106 +95,27 @@ def fetch_news():
 
 def already_exists(title):
 
-    result = (
-        supabase
-        .table("upsc_notes")
-        .select("id")
-        .eq("title", title)
-        .execute()
-    )
+    try:
 
-    return len(result.data) > 0
+        result = (
+            supabase
+            .table("upsc_notes")
+            .select("id")
+            .eq("title", title)
+            .execute()
+        )
 
-
-
-
-# -----------------------------
-# GS CLASSIFICATION
-# -----------------------------
-
-def classify_gs(title):
-
-    text = title.lower()
+        return len(result.data) > 0
 
 
-    if any(word in text for word in [
-        "constitution",
-        "supreme court",
-        "parliament",
-        "bill",
-        "scheme",
-        "government"
-    ]):
-        return "GS2"
+    except Exception as e:
 
+        print(
+            "Duplicate check failed:",
+            e
+        )
 
-    if any(word in text for word in [
-        "economy",
-        "rbi",
-        "inflation",
-        "gdp",
-        "bank"
-    ]):
-        return "GS3 Economy"
-
-
-    if any(word in text for word in [
-        "environment",
-        "climate",
-        "forest",
-        "wildlife"
-    ]):
-        return "GS3 Environment"
-
-
-    if any(word in text for word in [
-        "isro",
-        "space",
-        "technology",
-        "science"
-    ]):
-        return "GS3 Science"
-
-
-    if any(word in text for word in [
-        "history",
-        "culture",
-        "heritage"
-    ]):
-        return "GS1"
-
-
-    return "GS2"
-
-
-
-
-# -----------------------------
-# IMPORTANCE
-# -----------------------------
-
-def importance(title):
-
-    score = 3
-
-    keywords = [
-        "supreme court",
-        "budget",
-        "rbi",
-        "policy",
-        "scheme",
-        "international"
-    ]
-
-
-    for word in keywords:
-
-        if word in title.lower():
-
-            score += 1
-
-
-    return min(score, 5)
+        return False
 
 
 
@@ -205,100 +124,205 @@ def importance(title):
 # SAVE ARTICLE
 # -----------------------------
 
-def save_article(article):
+def save_article(article, full_text):
+
 
     data = {
 
+
         "date":
-        datetime.now().strftime("%Y-%m-%d"),
+        datetime.now().strftime(
+            "%Y-%m-%d"
+        ),
+
 
         "title":
         article["title"],
 
+
         "source":
         article["link"],
 
+
         "gs_paper":
-        classify_gs(article["title"]),
+        classify_gs(
+            article["title"],
+            article["summary"]
+        ),
+
 
         "importance":
-        importance(article["title"]),
+        importance(
+            article["title"],
+            article["summary"]
+        ),
+
 
         "notes":
-        article["summary"]
+        full_text if full_text else article["summary"]
 
     }
 
 
+
     supabase.table(
         "upsc_notes"
-    ).insert(data).execute()
+    ).insert(
+        data
+    ).execute()
+
 
 
 
 
 # -----------------------------
-# MAIN
+# MAIN AUTOMATION
 # -----------------------------
 
 def main():
 
-    print("Starting UPSC News Automation")
+
+    print(
+        "Starting UPSC News Automation"
+    )
 
 
     articles = fetch_news()
 
 
     print(
-        "Articles found:",
+        "Total articles fetched:",
         len(articles)
     )
+
+
+
+    saved = 0
+
 
 
     for article in articles:
 
 
-        if not article["title"]:
+        title = article["title"]
+
+
+        if not title:
+
             continue
 
 
-        if already_exists(article["title"]):
+
+        print(
+            "\nChecking:",
+            title
+        )
+
+
+
+        # FILTER IRRELEVANT NEWS
+
+        if not is_relevant(
+            title,
+            article["summary"]
+        ):
 
             print(
-                "Duplicate:",
-                article["title"]
+                "Skipped - Not relevant"
             )
 
             continue
 
 
+
+
+        # DUPLICATE CHECK
+
+        if already_exists(title):
+
+            print(
+                "Skipped - Duplicate"
+            )
+
+            continue
+
+
+
+
+
+        # ARTICLE EXTRACTION
+
         print(
-            "Saving:",
-            article["title"]
+            "Extracting article..."
         )
 
 
-        save_article(article)
+        full_text = extract_article(
+            article["link"]
+        )
+
+
+
+        if not full_text:
+
+            print(
+                "Using RSS summary"
+            )
+
+
+
+        # SAVE
+
+        print(
+            "Saving:",
+            title
+        )
+
+
+        save_article(
+            article,
+            full_text
+        )
+
+
+        saved += 1
+
 
 
 
     # -------------------------
-    # SIDEBAR AUTOMATION
+    # SIDEBAR UPDATE
     # -------------------------
 
-    print("Updating UPSC Lens sidebar")
+    print(
+        "\nUpdating UPSC Lens sidebar"
+    )
 
 
-    fetch_quotes(supabase)
+    fetch_quotes(
+        supabase
+    )
 
-    fetch_facts(supabase)
 
-    fetch_reports(supabase)
+    fetch_facts(
+        supabase
+    )
+
+
+    fetch_reports(
+        supabase
+    )
 
 
 
     print(
-        "Automation completed"
+        "\nAutomation completed"
+    )
+
+
+    print(
+        "New articles saved:",
+        saved
     )
 
 
