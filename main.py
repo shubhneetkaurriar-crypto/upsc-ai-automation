@@ -3,6 +3,9 @@ import feedparser
 from datetime import datetime
 from supabase import create_client
 
+from sidebar import fetch_quotes, fetch_facts, fetch_reports
+
+
 
 # -----------------------------
 # SUPABASE CONNECTION
@@ -14,10 +17,12 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise Exception("Supabase keys missing")
 
+
 supabase = create_client(
     SUPABASE_URL,
     SUPABASE_KEY
 )
+
 
 
 # -----------------------------
@@ -75,15 +80,14 @@ def fetch_news():
 
                 })
 
+
         except Exception as e:
 
-            print(
-                source,
-                "error:",
-                e
-            )
+            print(source, "error:", e)
+
 
     return articles
+
 
 
 
@@ -102,6 +106,7 @@ def already_exists(title):
     )
 
     return len(result.data) > 0
+
 
 
 
@@ -165,6 +170,7 @@ def classify_gs(title):
 
 
 
+
 # -----------------------------
 # IMPORTANCE
 # -----------------------------
@@ -194,8 +200,9 @@ def importance(title):
 
 
 
+
 # -----------------------------
-# SAVE TO SUPABASE
+# SAVE ARTICLE
 # -----------------------------
 
 def save_article(article):
@@ -229,6 +236,7 @@ def save_article(article):
 
 
 
+
 # -----------------------------
 # MAIN
 # -----------------------------
@@ -237,7 +245,9 @@ def main():
 
     print("Starting UPSC News Automation")
 
+
     articles = fetch_news()
+
 
     print(
         "Articles found:",
@@ -246,6 +256,7 @@ def main():
 
 
     for article in articles:
+
 
         if not article["title"]:
             continue
@@ -266,13 +277,31 @@ def main():
             article["title"]
         )
 
+
         save_article(article)
+
+
+
+    # -------------------------
+    # SIDEBAR AUTOMATION
+    # -------------------------
+
+    print("Updating UPSC Lens sidebar")
+
+
+    fetch_quotes(supabase)
+
+    fetch_facts(supabase)
+
+    fetch_reports(supabase)
 
 
 
     print(
         "Automation completed"
     )
+
+
 
 
 
