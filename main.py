@@ -1,25 +1,18 @@
 import os
-import requests
 import feedparser
 from datetime import datetime
 from supabase import create_client
 
 
-# ==============================
-# ENVIRONMENT VARIABLES
-# ==============================
+# -----------------------------
+# SUPABASE CONNECTION
+# -----------------------------
 
-GROK_API_KEY = os.environ.get("GROK_API_KEY")
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-
-if not GROK_API_KEY:
-    raise Exception("GROK_API_KEY missing")
-
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise Exception("Supabase credentials missing")
-
 
 supabase = create_client(
     SUPABASE_URL,
@@ -27,15 +20,15 @@ supabase = create_client(
 )
 
 
-# ==============================
-# FETCH GOOGLE NEWS
-# ==============================
+# -----------------------------
+# FETCH NEWS
+# -----------------------------
 
 def fetch_news():
 
     url = (
         "https://news.google.com/rss/search?"
-        "q=India+UPSC+OR+government+OR+economy+OR+environment+OR+international+relations"
+        "q=India+government+OR+Supreme+Court+OR+economy+OR+environment+OR+ISRO+OR+international+relations"
         "&hl=en-IN&gl=IN&ceid=IN:en"
     )
 
@@ -43,121 +36,155 @@ def fetch_news():
 
     articles = []
 
-    for item in feed.entries[:5]:
+    for item in feed.entries[:15]:
+
         articles.append({
             "title": item.title,
-            "link": item.link
+            "link": item.link,
+            "summary": item.get("summary", "")
         })
 
     return articles
 
 
 
-# ==============================
-# GROK SUMMARY
-# ==============================
+# -----------------------------
+# DUPLICATE CHECK
+# -----------------------------
 
-def generate_notes(title):
+def already_exists(title):
 
-    prompt = f"""
-You are a UPSC Civil Services current affairs expert.
-
-Analyze this news:
-
-{title}
-
-Return ONLY in this structure:
-
-GS Paper:
-(mention GS1/GS2/GS3/GS4)
-
-Importance:
-(number from 1 to 5)
-
-Notes:
-- Why in news
-- Background
-- Key facts for Prelims
-- Mains answer points
-- Important keywords
-"""
-
-    response = requests.post(
-        "https://api.x.ai/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {GROK_API_KEY}",
-            "Content-Type": "application/json"
-        },
-        json={
-            "model": "grok-4",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ]
-        }
+    result = (
+        supabase
+        .table("upsc_notes")
+        .select("title")
+        .eq("title", title)
+        .execute()
     )
 
-    if response.status_code != 200:
-        raise Exception(response.text)
-
-    data = response.json()
-
-    return data["choices"][0]["message"]["content"]
+    return len(result.data) > 0
 
 
 
-# ==============================
-# SAVE TO SUPABASE
-# ==============================
+# -----------------------------
+# GS CLASSIFICATION
+# -----------------------------
 
-def save_to_database(article, notes):
+def classify_gs(title):
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    text = title.lower()
 
-    record = {
-        "date": today,
-        "title": article["title"],
-        "source": article["link"],
-        "gs_paper": extract_gs(notes),
-        "importance": extract_importance(notes),
-        "notes": notes
-    }
+    if any(word in text for word in [
+        "supreme court",
+        "parliament",
+        "constitution",
+        "bill",
+        "election",
+        "government",
+        "policy"
+    ]):
+        return "GS2"
 
-    supabase.table("upsc_notes").insert(record).execute()
+    if any(word in text for word in [
+        "gdp",
+        "economy",
+        "rbi",
+        "inflation",
+        "budget",
+        "tax"
+    ]):
+        return "GS3 Economy"
 
+    if any(word in text for word in [
+        "climate",
+        "environment",
+        "forest",
+        "wildlife",
+        "pollution"
+    ]):
+        return "GS3 Environment"
 
+    if any(word in text for word in [
+        "isro",
+        "space",
+        "ai",
+        "technology",
+        "science"
+    ]):
+        return "GS3 Science"
 
-def extract_gs(text):
-
-    for line in text.split("\n"):
-        if "GS Paper:" in line:
-            return line.replace("GS Paper:", "").strip()
+    if any(word in text for word in [
+        "culture",
+        "heritage",
+        "history"
+    ]):
+        return "GS1"
 
     return "GS2"
 
 
 
-def extract_importance(text):
+# -----------------------------
+# IMPORTANCE SCORE
+# -----------------------------
 
-    for line in text.split("\n"):
-        if "Importance:" in line:
-            try:
-                return int(
-                    line.replace("Importance:", "")
-                    .strip()
-                )
-            except:
-                return 3
+def importance_score(title):
 
-    return 3
+    important_words = [
+        "supreme court",
+        "bill",
+        "policy",
+        "rbi",
+        "budget",
+        "isro",
+        "international"
+    ]
+
+    score = 3
+
+    for word in important_words:
+        if word in title.lower():
+            score += 1
+
+    return min(score, 5)
 
 
 
-# ==============================
+# -----------------------------
+# SAVE TO SUPABASE
+# -----------------------------
+
+def save_article(article):
+
+    record = {
+
+        "date": datetime.now().strftime("%Y-%m-%d"),
+
+        "title": article["title"],
+
+        "source": article["link"],
+
+        "gs_paper": classify_gs(
+            article["title"]
+        ),
+
+        "importance": importance_score(
+            article["title"]
+        ),
+
+        "notes": article["summary"]
+
+    }
+
+    supabase.table(
+        "upsc_notes"
+    ).insert(record).execute()
+
+
+
+# -----------------------------
 # MAIN
-# ==============================
+# -----------------------------
 
 def main():
 
@@ -165,22 +192,33 @@ def main():
 
     articles = fetch_news()
 
-    print(f"Found {len(articles)} articles")
+    print(
+        "Found:",
+        len(articles)
+    )
 
     for article in articles:
 
-        print("Processing:", article["title"])
+        if already_exists(article["title"]):
 
-        notes = generate_notes(
+            print(
+                "Skipping duplicate:",
+                article["title"]
+            )
+
+            continue
+
+
+        print(
+            "Saving:",
             article["title"]
         )
 
-        save_to_database(
-            article,
-            notes
-        )
+        save_article(article)
 
-        print("Saved successfully")
+
+    print("Automation completed")
+
 
 
 if __name__ == "__main__":
