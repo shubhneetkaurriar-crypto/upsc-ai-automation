@@ -2,7 +2,7 @@ import feedparser
 from datetime import datetime
 
 
-SOURCES = {
+RSS_SOURCES = {
 
     "PIB":
     "https://pib.gov.in/RssMain.aspx",
@@ -10,13 +10,14 @@ SOURCES = {
     "RBI":
     "https://www.rbi.org.in/rss/PressReleases.xml",
 
-    "ISRO":
-    "https://www.isro.gov.in/rss.xml",
+    "The Hindu Science":
+    "https://www.thehindu.com/sci-tech/feeder/default.rss",
 
-    "NITI Aayog":
-    "https://www.niti.gov.in/rss.xml"
+    "Indian Express":
+    "https://indianexpress.com/section/india/feed/"
 
 }
+
 
 
 def today():
@@ -25,7 +26,7 @@ def today():
 
 
 
-def exists(supabase, table, column, value):
+def check_exists(supabase, table, column, value):
 
     result = (
         supabase
@@ -35,15 +36,17 @@ def exists(supabase, table, column, value):
         .execute()
     )
 
-    return bool(result.data)
+    return len(result.data) > 0
 
 
 
-def get_subject(text):
+
+def find_subject(text):
 
     text = text.lower()
 
-    if any(x in text for x in [
+
+    if any(word in text for word in [
         "rbi",
         "inflation",
         "economy",
@@ -53,96 +56,73 @@ def get_subject(text):
         return "Economy"
 
 
-    if any(x in text for x in [
-        "environment",
+    if any(word in text for word in [
         "climate",
         "forest",
-        "wildlife"
+        "wildlife",
+        "environment"
     ]):
         return "Environment"
 
 
-    if any(x in text for x in [
-        "isro",
-        "space",
+    if any(word in text for word in [
+        "science",
         "technology",
-        "science"
+        "space",
+        "isro"
     ]):
         return "Science & Technology"
 
 
-    if any(x in text for x in [
+    if any(word in text for word in [
+        "government",
         "scheme",
         "policy",
-        "government",
-        "ministry"
+        "court",
+        "parliament"
     ]):
-        return "Governance"
+        return "Polity"
 
 
     return "General"
 
 
 
-def fetch_live_items():
 
-    items = []
+def get_live_news():
 
-
-    for source, url in SOURCES.items():
-
-        try:
-
-            feed = feedparser.parse(url)
+    articles = []
 
 
-            for entry in feed.entries[:5]:
+    for source, url in RSS_SOURCES.items():
 
-                title = entry.get(
-                    "title",
-                    ""
-                )
+        feed = feedparser.parse(url)
 
 
-                summary = entry.get(
-                    "summary",
-                    ""
-                )
+        for item in feed.entries[:5]:
+
+            title = item.get("title", "")
 
 
-                if title:
+            if title:
 
-                    items.append({
+                articles.append({
 
-                        "source": source,
+                    "title": title,
 
-                        "title": title,
+                    "source": source
 
-                        "summary": summary
-
-                    })
+                })
 
 
-        except Exception as e:
-
-            print(
-                "RSS error",
-                source,
-                e
-            )
-
-
-    return items
+    return articles
 
 
 
-# -----------------------------
-# QUOTES
-# -----------------------------
 
 def fetch_quotes(supabase):
 
-    quote = {
+    data = {
 
         "quote":
         "The Constitution is not a mere lawyers' document; it is a vehicle of life.",
@@ -159,47 +139,36 @@ def fetch_quotes(supabase):
     }
 
 
-    if not exists(
+    if not check_exists(
         supabase,
         "quotes",
         "quote",
-        quote["quote"]
+        data["quote"]
     ):
 
         supabase.table(
             "quotes"
-        ).insert(
-            quote
-        ).execute()
+        ).insert(data).execute()
 
 
 
-# -----------------------------
-# FACTS
-# -----------------------------
 
 def fetch_facts(supabase):
 
-    items = fetch_live_items()
+    news = get_live_news()
 
 
-    for item in items:
+    print("FACTS FOUND:", len(news))
 
 
-        fact = item["title"]
+    for item in news:
 
 
-        if len(fact) < 30:
-
-            continue
-
-
-
-        if not exists(
+        if not check_exists(
             supabase,
             "daily_facts",
             "fact",
-            fact
+            item["title"]
         ):
 
 
@@ -208,11 +177,11 @@ def fetch_facts(supabase):
             ).insert({
 
                 "fact":
-                fact,
+                item["title"],
 
                 "subject":
-                get_subject(
-                    fact
+                find_subject(
+                    item["title"]
                 ),
 
                 "date":
@@ -222,9 +191,6 @@ def fetch_facts(supabase):
 
 
 
-# -----------------------------
-# REPORTS
-# -----------------------------
 
 def fetch_reports(supabase):
 
@@ -238,19 +204,18 @@ def fetch_reports(supabase):
             "Ministry of Finance",
 
             "key_point":
-            "Important source for GDP growth, inflation, fiscal deficit and economic reforms."
+            "Important for economic growth, inflation and fiscal policy."
         },
-
 
         {
             "report_name":
-            "Monetary Policy Report",
+            "World Development Report",
 
             "organisation":
-            "Reserve Bank of India",
+            "World Bank",
 
             "key_point":
-            "Explains inflation outlook and monetary policy decisions."
+            "Important for development indicators and policy analysis."
         }
 
     ]
@@ -259,19 +224,16 @@ def fetch_reports(supabase):
     for report in reports:
 
 
-        if not exists(
+        if not check_exists(
             supabase,
             "reports",
             "report_name",
             report["report_name"]
         ):
 
-
             report["date"] = today()
 
 
             supabase.table(
                 "reports"
-            ).insert(
-                report
-            ).execute()
+            ).insert(report).execute()
