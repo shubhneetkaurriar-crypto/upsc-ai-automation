@@ -3,89 +3,112 @@ from datetime import datetime
 
 
 # -----------------------------
-# DAILY QUOTES
+# ETHICS QUOTES SOURCES
 # -----------------------------
 
-QUOTE_FEEDS = {
+QUOTE_SOURCES = {
+
+    "UN Values":
+    "https://news.un.org/feed/subscribe/en/news/topic/peace-and-security/feed/rss.xml",
 
     "Gandhi Archives":
-    "https://www.gandhi.gov.in/feed",
-
-    "UN":
-    "https://news.un.org/feed/subscribe/en/news/topic/peace-and-security/feed/rss.xml"
+    "https://www.gandhi.gov.in/feed"
 
 }
+
 
 
 def fetch_quotes(supabase):
 
-    for source, url in QUOTE_FEEDS.items():
+    try:
 
-        try:
+        for source,url in QUOTE_SOURCES.items():
 
             feed = feedparser.parse(url)
 
-            for item in feed.entries[:1]:
 
-                data = {
-
-                    "quote":
-                    item.get("title",""),
-
-                    "author":
-                    source,
-
-                    "theme":
-                    "Ethics",
-
-                    "date":
-                    datetime.now().strftime("%Y-%m-%d")
-
-                }
+            if len(feed.entries)==0:
+                continue
 
 
-                supabase.table(
-                    "quotes"
-                ).insert(data).execute()
+            item = feed.entries[0]
 
 
-        except Exception as e:
+            data = {
 
-            print("Quote error:", e)
+                "quote":
+                item.get("title",""),
+
+                "author":
+                source,
+
+                "theme":
+                "Ethics & Values",
+
+                "date":
+                datetime.now().strftime("%Y-%m-%d")
+
+            }
+
+
+            supabase.table(
+                "quotes"
+            ).insert(data).execute()
+
+
+            break
+
+
+    except Exception as e:
+
+        print(
+            "Quotes error:",
+            e
+        )
+
 
 
 
 
 # -----------------------------
-# DAILY FACTS
+# PRELIMS FACTS
 # -----------------------------
 
-FACT_FEEDS = {
+
+FACT_SOURCES = {
 
     "PIB":
     "https://pib.gov.in/RssMain.aspx",
 
-    "ISRO":
-    "https://www.isro.gov.in/rss.xml",
-
     "RBI":
-    "https://www.rbi.org.in/rss/PressReleases.xml"
+    "https://www.rbi.org.in/rss/PressReleases.xml",
+
+    "ISRO":
+    "https://www.isro.gov.in/rss.xml"
 
 }
+
 
 
 
 def fetch_facts(supabase):
 
 
-    for source,url in FACT_FEEDS.items():
+    try:
 
-        try:
+
+        count = 0
+
+
+        for source,url in FACT_SOURCES.items():
+
 
             feed = feedparser.parse(url)
 
 
-            for item in feed.entries[:5]:
+
+            for item in feed.entries[:2]:
+
 
                 data = {
 
@@ -101,18 +124,29 @@ def fetch_facts(supabase):
                 }
 
 
+
                 supabase.table(
                     "daily_facts"
                 ).insert(data).execute()
 
 
 
-        except Exception as e:
+                count += 1
 
-            print(
-                "Fact error:",
-                e
-            )
+
+
+                if count >= 5:
+                    return
+
+
+
+    except Exception as e:
+
+        print(
+            "Facts error:",
+            e
+        )
+
 
 
 
@@ -123,17 +157,24 @@ def fetch_facts(supabase):
 # -----------------------------
 
 
-REPORT_FEEDS = {
+
+REPORT_SOURCES = {
 
 
-    "NITI Aayog":
-    "https://www.niti.gov.in/rss.xml",
+"NITI Aayog":
+"https://www.niti.gov.in/rss.xml",
 
 
-    "World Bank":
-    "https://www.worldbank.org/en/news/all?format=rss"
+"World Bank":
+"https://www.worldbank.org/en/news/all?format=rss",
+
+
+"IMF":
+"https://www.imf.org/en/News/RSS"
+
 
 }
+
 
 
 
@@ -141,14 +182,20 @@ REPORT_FEEDS = {
 def fetch_reports(supabase):
 
 
-    for source,url in REPORT_FEEDS.items():
+    try:
 
-        try:
+
+        saved = 0
+
+
+        for source,url in REPORT_SOURCES.items():
+
 
             feed = feedparser.parse(url)
 
 
-            for item in feed.entries[:3]:
+
+            for item in feed.entries[:2]:
 
 
                 data = {
@@ -172,6 +219,7 @@ def fetch_reports(supabase):
                     "date":
                     datetime.now().strftime("%Y-%m-%d")
 
+
                 }
 
 
@@ -182,9 +230,19 @@ def fetch_reports(supabase):
 
 
 
-        except Exception as e:
+                saved += 1
 
-            print(
-                "Report error:",
-                e
-            )
+
+
+                if saved >= 5:
+                    return
+
+
+
+
+    except Exception as e:
+
+        print(
+            "Reports error:",
+            e
+        )
