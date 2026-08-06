@@ -10,6 +10,7 @@ from news_filter import is_relevant
 from article_extractor import extract_article
 from gs_classifier import classify_gs
 from importance import importance
+from generative_ai import analyze_news
 
 
 # -----------------------------
@@ -30,7 +31,6 @@ supabase = create_client(
 )
 
 
-
 # -----------------------------
 # FETCH NEWS
 # -----------------------------
@@ -46,7 +46,6 @@ def fetch_news():
         try:
 
             feed = feedparser.parse(url)
-
 
             for item in feed.entries[:10]:
 
@@ -74,7 +73,6 @@ def fetch_news():
 
                 })
 
-
         except Exception as e:
 
             print(
@@ -85,7 +83,6 @@ def fetch_news():
 
 
     return articles
-
 
 
 
@@ -119,16 +116,23 @@ def already_exists(title):
 
 
 
-
 # -----------------------------
-# SAVE ARTICLE
+# SAVE ARTICLE WITH GEMINI AI
 # -----------------------------
 
 def save_article(article, full_text):
 
 
-    data = {
+    print("Sending to Gemini AI...")
 
+
+    ai_result = analyze_news(
+        article["title"],
+        article["summary"]
+    )
+
+
+    data = {
 
         "date":
         datetime.now().strftime(
@@ -159,10 +163,13 @@ def save_article(article, full_text):
 
 
         "notes":
-        full_text if full_text else article["summary"]
+        ai_result
+        if ai_result
+        else full_text
+        if full_text
+        else article["summary"]
 
     }
-
 
 
     supabase.table(
@@ -173,14 +180,11 @@ def save_article(article, full_text):
 
 
 
-
-
 # -----------------------------
 # MAIN AUTOMATION
 # -----------------------------
 
 def main():
-
 
     print(
         "Starting UPSC News Automation"
@@ -196,9 +200,7 @@ def main():
     )
 
 
-
     saved = 0
-
 
 
     for article in articles:
@@ -235,7 +237,6 @@ def main():
 
 
 
-
         # DUPLICATE CHECK
 
         if already_exists(title):
@@ -245,8 +246,6 @@ def main():
             )
 
             continue
-
-
 
 
 
@@ -260,7 +259,6 @@ def main():
         full_text = extract_article(
             article["link"]
         )
-
 
 
         if not full_text:
@@ -286,7 +284,6 @@ def main():
 
 
         saved += 1
-
 
 
 
@@ -324,8 +321,6 @@ def main():
         "New articles saved:",
         saved
     )
-
-
 
 
 
