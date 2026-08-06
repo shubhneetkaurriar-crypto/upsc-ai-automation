@@ -3,79 +3,10 @@ from datetime import datetime
 
 
 # -----------------------------
-# ETHICS QUOTES SOURCES
+# SOURCES
 # -----------------------------
 
-QUOTE_SOURCES = {
-
-    "UN Values":
-    "https://news.un.org/feed/subscribe/en/news/topic/peace-and-security/feed/rss.xml",
-
-    "Gandhi Archives":
-    "https://www.gandhi.gov.in/feed"
-
-}
-
-
-
-def fetch_quotes(supabase):
-
-    try:
-
-        for source,url in QUOTE_SOURCES.items():
-
-            feed = feedparser.parse(url)
-
-
-            if len(feed.entries)==0:
-                continue
-
-
-            item = feed.entries[0]
-
-
-            data = {
-
-                "quote":
-                item.get("title",""),
-
-                "author":
-                source,
-
-                "theme":
-                "Ethics & Values",
-
-                "date":
-                datetime.now().strftime("%Y-%m-%d")
-
-            }
-
-
-            supabase.table(
-                "quotes"
-            ).insert(data).execute()
-
-
-            break
-
-
-    except Exception as e:
-
-        print(
-            "Quotes error:",
-            e
-        )
-
-
-
-
-
-# -----------------------------
-# PRELIMS FACTS
-# -----------------------------
-
-
-FACT_SOURCES = {
+SOURCES = {
 
     "PIB":
     "https://pib.gov.in/RssMain.aspx",
@@ -84,165 +15,299 @@ FACT_SOURCES = {
     "https://www.rbi.org.in/rss/PressReleases.xml",
 
     "ISRO":
-    "https://www.isro.gov.in/rss.xml"
+    "https://www.isro.gov.in/rss.xml",
+
+    "NITI Aayog":
+    "https://www.niti.gov.in/rss.xml"
 
 }
 
 
 
+# -----------------------------
+# DUPLICATE CHECK
+# -----------------------------
 
-def fetch_facts(supabase):
+def exists(supabase, table, column, value):
 
+    result = (
+        supabase
+        .table(table)
+        .select("id")
+        .eq(column, value)
+        .execute()
+    )
 
-    try:
-
-
-        count = 0
-
-
-        for source,url in FACT_SOURCES.items():
-
-
-            feed = feedparser.parse(url)
-
-
-
-            for item in feed.entries[:2]:
-
-
-                data = {
-
-                    "fact":
-                    item.get("title",""),
-
-                    "subject":
-                    source,
-
-                    "date":
-                    datetime.now().strftime("%Y-%m-%d")
-
-                }
-
-
-
-                supabase.table(
-                    "daily_facts"
-                ).insert(data).execute()
-
-
-
-                count += 1
-
-
-
-                if count >= 5:
-                    return
-
-
-
-    except Exception as e:
-
-        print(
-            "Facts error:",
-            e
-        )
-
-
+    return len(result.data) > 0
 
 
 
 
 # -----------------------------
-# REPORTS & INDICES
+# SUBJECT CLASSIFICATION
 # -----------------------------
 
+def classify_subject(text):
+
+    text = text.lower()
 
 
-REPORT_SOURCES = {
+    if any(x in text for x in [
+        "economy",
+        "rbi",
+        "bank",
+        "inflation",
+        "finance"
+    ]):
+        return "Economy"
 
 
-"NITI Aayog":
-"https://www.niti.gov.in/rss.xml",
+    if any(x in text for x in [
+        "environment",
+        "climate",
+        "forest",
+        "wildlife"
+    ]):
+        return "Environment"
 
 
-"World Bank":
-"https://www.worldbank.org/en/news/all?format=rss",
+    if any(x in text for x in [
+        "space",
+        "isro",
+        "satellite",
+        "technology"
+    ]):
+        return "Science & Technology"
 
 
-"IMF":
-"https://www.imf.org/en/News/RSS"
+    if any(x in text for x in [
+        "policy",
+        "scheme",
+        "government",
+        "governance"
+    ]):
+        return "Governance"
 
 
-}
+    return "General"
 
 
 
 
+# -----------------------------
+# FETCH RSS
+# -----------------------------
 
-def fetch_reports(supabase):
+def fetch_online_updates():
+
+    items = []
 
 
-    try:
+    for source, url in SOURCES.items():
 
-
-        saved = 0
-
-
-        for source,url in REPORT_SOURCES.items():
-
+        try:
 
             feed = feedparser.parse(url)
 
 
+            for entry in feed.entries[:5]:
 
-            for item in feed.entries[:2]:
+                items.append({
 
+                    "source": source,
 
-                data = {
-
-
-                    "report_name":
-                    item.get("title",""),
-
-
-                    "organisation":
-                    source,
-
-
-                    "key_point":
-                    item.get(
-                        "summary",
+                    "title": entry.get(
+                        "title",
                         ""
                     ),
 
+                    "summary": entry.get(
+                        "summary",
+                        ""
+                    )
 
-                    "date":
-                    datetime.now().strftime("%Y-%m-%d")
-
-
-                }
-
-
-
-                supabase.table(
-                    "reports"
-                ).insert(data).execute()
+                })
 
 
+        except Exception as e:
 
-                saved += 1
+            print(
+                source,
+                "failed:",
+                e
+            )
 
 
-
-                if saved >= 5:
-                    return
+    return items
 
 
 
 
-    except Exception as e:
+# -----------------------------
+# QUOTES
+# -----------------------------
 
-        print(
-            "Reports error:",
-            e
-        )
+def fetch_quotes(supabase):
+
+    quotes = [
+
+        {
+            "quote":
+            "The Constitution is not a mere lawyers' document; it is a vehicle of life.",
+            "author":
+            "Dr. B.R. Ambedkar",
+            "theme":
+            "Constitutionalism"
+        },
+
+        {
+            "quote":
+            "The best way to find yourself is to lose yourself in the service of others.",
+            "author":
+            "Mahatma Gandhi",
+            "theme":
+            "Public Service"
+        }
+
+    ]
+
+
+    for q in quotes:
+
+        if not exists(
+            supabase,
+            "quotes",
+            "quote",
+            q["quote"]
+        ):
+
+            q["date"] = datetime.now().strftime(
+                "%Y-%m-%d"
+            )
+
+            supabase.table(
+                "quotes"
+            ).insert(q).execute()
+
+
+
+
+# -----------------------------
+# DAILY FACTS
+# -----------------------------
+
+def fetch_facts(supabase):
+
+    updates = fetch_online_updates()
+
+
+    for item in updates:
+
+
+        fact = item["title"]
+
+
+        if len(fact) < 20:
+
+            continue
+
+
+
+        if not exists(
+            supabase,
+            "daily_facts",
+            "fact",
+            fact
+        ):
+
+
+            data = {
+
+                "fact":
+                fact,
+
+                "subject":
+                classify_subject(
+                    fact
+                ),
+
+                "date":
+                datetime.now().strftime(
+                    "%Y-%m-%d"
+                )
+
+            }
+
+
+            supabase.table(
+                "daily_facts"
+            ).insert(data).execute()
+
+
+
+
+# -----------------------------
+# REPORTS
+# -----------------------------
+
+def fetch_reports(supabase):
+
+    reports = [
+
+        {
+            "report_name":
+            "RBI Monetary Policy Report",
+
+            "organisation":
+            "Reserve Bank of India",
+
+            "key_point":
+            "Important for inflation, monetary policy and banking sector analysis."
+        },
+
+
+        {
+            "report_name":
+            "Economic Survey of India",
+
+            "organisation":
+            "Ministry of Finance",
+
+            "key_point":
+            "Provides analysis of India's economic performance."
+        },
+
+
+        {
+            "report_name":
+            "Human Development Report",
+
+            "organisation":
+            "UNDP",
+
+            "key_point":
+            "Important for social development indicators."
+        }
+
+    ]
+
+
+    for report in reports:
+
+
+        if not exists(
+            supabase,
+            "reports",
+            "report_name",
+            report["report_name"]
+        ):
+
+
+            report["date"] = datetime.now().strftime(
+                "%Y-%m-%d"
+            )
+
+
+            supabase.table(
+                "reports"
+            ).insert(report).execute()
