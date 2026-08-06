@@ -5,11 +5,14 @@ from supabase import create_client
 
 
 # -----------------------------
-# SUPABASE
+# SUPABASE CONNECTION
 # -----------------------------
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise Exception("Supabase keys missing")
 
 supabase = create_client(
     SUPABASE_URL,
@@ -18,7 +21,7 @@ supabase = create_client(
 
 
 # -----------------------------
-# SOURCES
+# RSS SOURCES
 # -----------------------------
 
 RSS_FEEDS = {
@@ -34,53 +37,51 @@ RSS_FEEDS = {
 
     "PRS":
     "https://prsindia.org/rss"
+
 }
 
 
 
 # -----------------------------
-# FETCH ARTICLES
+# FETCH NEWS
 # -----------------------------
 
 def fetch_news():
 
     articles = []
 
-
     for source, url in RSS_FEEDS.items():
+
+        print("Fetching:", source)
 
         try:
 
-            print("Fetching:", source)
-
             feed = feedparser.parse(url)
-
 
             for item in feed.entries[:10]:
 
                 articles.append({
 
-                    "title": item.get("title",""),
+                    "title": item.get("title", ""),
 
-                    "link": item.get("link",""),
+                    "link": item.get("link", ""),
 
-                    "summary":
-                    item.get("summary",
-                    item.get("description","")),
+                    "summary": item.get(
+                        "summary",
+                        item.get("description", "")
+                    ),
 
                     "source": source
 
                 })
 
-
         except Exception as e:
 
             print(
                 source,
-                "failed:",
+                "error:",
                 e
             )
-
 
     return articles
 
@@ -90,7 +91,7 @@ def fetch_news():
 # DUPLICATE CHECK
 # -----------------------------
 
-def exists(title):
+def already_exists(title):
 
     result = (
         supabase
@@ -110,51 +111,51 @@ def exists(title):
 
 def classify_gs(title):
 
-    t = title.lower()
+    text = title.lower()
 
 
-    if any(x in t for x in [
-        "court",
+    if any(word in text for word in [
+        "constitution",
+        "supreme court",
         "parliament",
         "bill",
-        "constitution",
-        "government",
-        "scheme"
+        "scheme",
+        "government"
     ]):
         return "GS2"
 
 
-    if any(x in t for x in [
+    if any(word in text for word in [
+        "economy",
         "rbi",
         "inflation",
-        "economy",
         "gdp",
         "bank"
     ]):
-        return "GS3"
+        return "GS3 Economy"
 
 
-    if any(x in t for x in [
+    if any(word in text for word in [
         "environment",
         "climate",
         "forest",
         "wildlife"
     ]):
-        return "GS3"
+        return "GS3 Environment"
 
 
-    if any(x in t for x in [
+    if any(word in text for word in [
         "isro",
         "space",
         "technology",
         "science"
     ]):
-        return "GS3"
+        return "GS3 Science"
 
 
-    if any(x in t for x in [
-        "culture",
+    if any(word in text for word in [
         "history",
+        "culture",
         "heritage"
     ]):
         return "GS1"
@@ -172,7 +173,7 @@ def importance(title):
 
     score = 3
 
-    words = [
+    keywords = [
         "supreme court",
         "budget",
         "rbi",
@@ -182,22 +183,22 @@ def importance(title):
     ]
 
 
-    for w in words:
+    for word in keywords:
 
-        if w in title.lower():
+        if word in title.lower():
 
             score += 1
 
 
-    return min(score,5)
+    return min(score, 5)
 
 
 
 # -----------------------------
-# SAVE
+# SAVE TO SUPABASE
 # -----------------------------
 
-def save(article):
+def save_article(article):
 
     data = {
 
@@ -222,10 +223,9 @@ def save(article):
     }
 
 
-    supabase
-    .table("upsc_notes")
-    .insert(data)
-    .execute()
+    supabase.table(
+        "upsc_notes"
+    ).insert(data).execute()
 
 
 
@@ -235,24 +235,23 @@ def save(article):
 
 def main():
 
-    print("Starting UPSC collector")
+    print("Starting UPSC News Automation")
 
     articles = fetch_news()
 
     print(
-        "Total articles:",
+        "Articles found:",
         len(articles)
     )
 
 
     for article in articles:
 
-
         if not article["title"]:
             continue
 
 
-        if exists(article["title"]):
+        if already_exists(article["title"]):
 
             print(
                 "Duplicate:",
@@ -267,12 +266,12 @@ def main():
             article["title"]
         )
 
-        save(article)
+        save_article(article)
 
 
 
     print(
-        "Completed successfully"
+        "Automation completed"
     )
 
 
