@@ -10,7 +10,6 @@ from news_filter import is_relevant
 from article_extractor import extract_article
 from gs_classifier import classify_gs
 from importance import importance
-from generative_ai import analyze_news
 
 
 # -----------------------------
@@ -117,20 +116,10 @@ def already_exists(title):
 
 
 # -----------------------------
-# SAVE ARTICLE WITH GEMINI AI
+# SAVE ARTICLE
 # -----------------------------
 
 def save_article(article, full_text):
-
-
-    print("Sending to Gemini AI...")
-
-
-    ai_result = analyze_news(
-        article["title"],
-        article["summary"]
-    )
-
 
     data = {
 
@@ -139,14 +128,11 @@ def save_article(article, full_text):
             "%Y-%m-%d"
         ),
 
-
         "title":
         article["title"],
 
-
         "source":
         article["link"],
-
 
         "gs_paper":
         classify_gs(
@@ -154,23 +140,16 @@ def save_article(article, full_text):
             article["summary"]
         ),
 
-
         "importance":
         importance(
             article["title"],
             article["summary"]
         ),
 
-
         "notes":
-        ai_result
-        if ai_result
-        else full_text
-        if full_text
-        else article["summary"]
+        full_text if full_text else article["summary"]
 
     }
-
 
     supabase.table(
         "upsc_notes"
