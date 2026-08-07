@@ -2,7 +2,7 @@ requests
 feedparser
 supabase
 python-dotenv
-google-generativeai
+google-genai
 newspaper4k
 lxml_html_clean
 beautifulsoup4
