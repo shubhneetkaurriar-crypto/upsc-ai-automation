@@ -1,12 +1,9 @@
 import os
-import google.generativeai as genai
+from google import genai
 
-# Connect Gemini API
-genai.configure(
+client = genai.Client(
     api_key=os.environ.get("GEMINI_API_KEY")
 )
-
-model = genai.GenerativeModel("gemini-2.5-flash")
 
 
 def analyze_news(title, description):
@@ -14,7 +11,7 @@ def analyze_news(title, description):
     prompt = f"""
 You are a UPSC Civil Services current affairs expert.
 
-Analyze this news article:
+Analyze this news article.
 
 Title:
 {title}
@@ -22,9 +19,7 @@ Title:
 Description:
 {description}
 
-Decide whether this is useful for UPSC.
-
-Return in this format:
+Return:
 
 Important: Yes/No
 GS Paper: GS1/GS2/GS3/GS4
@@ -33,15 +28,15 @@ Short Note:
 Prelims Facts:
 Mains Angle:
 
-Reject:
-- entertainment
-- sports
-- celebrity news
-- irrelevant local news
+Reject entertainment, sports, celebrity and irrelevant local news.
 """
 
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+
         return response.text
 
     except Exception as e:
